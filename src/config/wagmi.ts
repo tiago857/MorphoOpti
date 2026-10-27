@@ -1,7 +1,7 @@
-import { fallback, http, createConfig } from "wagmi";
-import { base, mainnet } from "wagmi/chains";
-import { injected } from "wagmi/connectors";
+import { createConfig, fallback, http } from "wagmi";
+import { arbitrum, base, hyperEvm, mainnet, monad } from "wagmi/chains";
 import { CHAINS, type SupportedChainId } from "./chains";
+import { injected } from "wagmi/connectors";
 
 /** Dedicated endpoint first (when configured), then verified public ones as backups. */
 function transportFor(chainId: SupportedChainId) {
@@ -16,12 +16,15 @@ function transportFor(chainId: SupportedChainId) {
 // EIP-6963 discovery is on by default: the Fordefi extension announces itself and shows up as its own
 // connector. The generic `injected()` connector is kept as a fallback (e.g. Fordefi's MetaMask emulation).
 export const wagmiConfig = createConfig({
-  chains: [mainnet, base],
+  chains: [mainnet, base, arbitrum, hyperEvm, monad],
   multiInjectedProviderDiscovery: true,
   connectors: [injected()],
   transports: {
     [mainnet.id]: transportFor(mainnet.id),
     [base.id]: transportFor(base.id),
+    [arbitrum.id]: transportFor(arbitrum.id),
+    [hyperEvm.id]: transportFor(hyperEvm.id),
+    [monad.id]: transportFor(monad.id),
   },
 });
 

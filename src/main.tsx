@@ -3,6 +3,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { WagmiProvider } from "wagmi";
 import App from "./App";
+import { AutoRefreshProvider } from "./hooks/useAutoRefresh";
 import { wagmiConfig } from "./config/wagmi";
 import "./styles.css";
 
@@ -14,7 +15,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
-        <App />
+        <AutoRefreshProvider>
+          <App />
+        </AutoRefreshProvider>
       </QueryClientProvider>
     </WagmiProvider>
   </React.StrictMode>,

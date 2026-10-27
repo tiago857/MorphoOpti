@@ -80,22 +80,28 @@ const MARKET_FIELDS = `
   }
 `;
 
-/** All listed USDC-loan markets on a chain, largest first. Idle markets (no collateral) are excluded. */
-export async function fetchUsdcMarkets(chainId: number, usdc: Address): Promise<ApiMarket[]> {
+/**
+ * All listed markets on a chain for the given loan assets, largest first. Idle markets (no
+ * collateral) are excluded.
+ */
+export async function fetchMarketsForAssets(chainId: number, assets: Address[]): Promise<ApiMarket[]> {
+  if (assets.length === 0) return [];
   const pageSize = 100;
   const all: ApiMarket[] = [];
-  for (let skip = 0; skip < 500; skip += pageSize) {
+  // Markets are paged across all requested assets at once; 1000 covers every listed stable market
+  // on both chains with plenty of head-room.
+  for (let skip = 0; skip < 1000; skip += pageSize) {
     const data = await gql<{ markets: { items: ApiMarket[] } }>(
-      `query Markets($chainId: Int!, $usdc: String!, $first: Int!, $skip: Int!) {
+      `query Markets($chainId: Int!, $assets: [String!]!, $first: Int!, $skip: Int!) {
         markets(
           first: $first
           skip: $skip
           orderBy: SupplyAssetsUsd
           orderDirection: Desc
-          where: { chainId_in: [$chainId], loanAssetAddress_in: [$usdc], listed: true }
+          where: { chainId_in: [$chainId], loanAssetAddress_in: $assets, listed: true }
         ) { items { ${MARKET_FIELDS} } }
       }`,
-      { chainId, usdc: usdc.toLowerCase(), first: pageSize, skip },
+      { chainId, assets: assets.map((a) => a.toLowerCase()), first: pageSize, skip },
     );
     const items = data.markets.items;
     all.push(...items.filter((m) => m.collateralAsset !== null));
@@ -155,4 +161,53 @@ export async function fetchUserPositions(chainId: number, address: Address): Pro
 
 export function rewardApr(m: ApiMarket): number {
   return (m.state?.rewards ?? []).reduce((acc, r) => acc + (r.supplyApr ?? 0), 0);
+}
+
+export interface ApiVault {
+  address: Address;
+  name: string;
+  symbol: string;
+  asset: ApiAsset;
+  state: {
+    apy: number | null;
+    netApy: number | null;
+    fee: number | null;
+    totalAssets: string | null;
+    totalAssetsUsd: number | null;
+    rewards: { asset: { symbol: string } | null; supplyApr: number | null }[] | null;
+  } | null;
+}
+
+const VAULT_FIELDS = `
+  address
+  name
+  symbol
+  asset { address symbol decimals }
+  state {
+    apy
+    netApy
+    fee
+    totalAssets
+    totalAssetsUsd
+    # The API renamed VaultState.rewards to allRewards; aliased so the rest of the app is unchanged.
+    rewards: allRewards { asset { symbol } supplyApr }
+  }
+`;
+
+/** Listed vaults on a chain whose underlying asset is one this app manages. */
+export async function fetchVaultsForAssets(chainId: number, assets: Address[]): Promise<ApiVault[]> {
+  if (assets.length === 0) return [];
+  const wanted = new Set(assets.map((a) => a.toLowerCase()));
+  const data = await gql<{ vaults: { items: ApiVault[] } }>(
+    `query Vaults($chainId: Int!) {
+      vaults(first: 500, where: { chainId_in: [$chainId], listed: true }) { items { ${VAULT_FIELDS} } }
+    }`,
+    { chainId },
+  );
+  // The vault filter has no loan-asset input, so the asset match happens here.
+  return data.vaults.items.filter((v) => wanted.has(v.asset.address.toLowerCase()));
+}
+
+export function vaultRewardApr(v: ApiVault): number {
+  return (v.state?.rewards ?? []).reduce((acc, r) => acc + (r.supplyApr ?? 0), 0);
 }

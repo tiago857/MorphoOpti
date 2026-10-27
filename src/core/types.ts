@@ -25,6 +25,8 @@ export interface RewardInfo {
 
 export interface MarketMeta {
   collateralSymbol: string;
+  /** Loan-asset symbol (USDC / USDT / aUSD), used for labelling and pool grouping. */
+  loanSymbol: string;
   collateralAddress: Address | null;
   lltv: number; // fraction, e.g. 0.86
   supplyAssetsUsd: number;
@@ -50,7 +52,7 @@ export interface PortfolioMarket {
    */
   rateKnown: boolean;
   supplyShares: bigint;
-  /** User's supplied USDC (accrued), in token units (6 decimals). */
+  /** User's supplied loan asset (accrued), in token units (6 decimals). */
   supplyAssets: bigint;
   whitelisted: boolean;
   meta: MarketMeta;

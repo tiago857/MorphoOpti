@@ -2,13 +2,16 @@
 // GeneralAdapter1, run the optimizer on their live position, encode the Bundler3 bundle, and
 // eth_estimateGas it as them. Nothing is signed or sent.
 import { createPublicClient, encodeFunctionData, http, parseAbi } from "viem";
-import { base, mainnet } from "viem/chains";
+import { arbitrum, base, hyperEvm, mainnet, monad } from "viem/chains";
 
+// Usage: node scripts/dryrun.mjs [chainId] [loanTokenAddress]
+// The loan token defaults to that chain's USDC; pass another to dry-run a USDT or aUSD pool.
 const CHAIN_ID = Number(process.argv[2] ?? 8453);
-const CFG = {
+const ALL = {
   1: {
     chain: mainnet,
     rpc: "https://ethereum-rpc.publicnode.com",
+    morpho: "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
     bundler3: "0x6566194141eefa99Af43Bb5Aa71460Ca2Dc90245",
     adapter: "0x4A6c312ec70E8747a587EE860a0353cd42Be0aE0",
     irm: "0x870aC11D48B15DB9a138Cf899d20F13F79Ba00BC",
@@ -17,13 +20,48 @@ const CFG = {
   8453: {
     chain: base,
     rpc: "https://base-rpc.publicnode.com",
+    morpho: "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
     bundler3: "0x6BFd8137e702540E7A42B74178A4a49Ba43920C4",
     adapter: "0xb98c948CFA24072e58935BC004a8A7b376AE746A",
     irm: "0x46415998764C29aB2a25CbeA6254146D50D22687",
     usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
   },
-}[CHAIN_ID];
-const MORPHO = "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb";
+  42161: {
+    chain: arbitrum,
+    rpc: "https://arbitrum-one-rpc.publicnode.com",
+    morpho: "0x6c247b1F6182318877311737BaC0844bAa518F5e",
+    bundler3: "0x1FA4431bC113D308beE1d46B0e98Cb805FB48C13",
+    adapter: "0x9954aFB60BB5A222714c478ac86990F221788B88",
+    irm: "0x66F30587FB8D4206918deb78ecA7d5eBbafD06DA",
+    usdc: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+  },
+  999: {
+    chain: hyperEvm,
+    rpc: "https://rpc.hyperliquid.xyz/evm",
+    morpho: "0x68e37dE8d93d3496ae143F2E900490f6280C57cD",
+    bundler3: "0xa3F50477AfA601C771874260A3B34B40e244Fa0e",
+    adapter: "0xD7F48aDE56613E8605863832B7B8A1985B934aE4",
+    irm: "0xD4a426F010986dCad727e8dd6eed44cA4A9b7483",
+    usdc: "0xb88339CB7199b77E23DB6E890353E22632Ba630f",
+  },
+  143: {
+    chain: monad,
+    rpc: "https://rpc.monad.xyz",
+    morpho: "0xD5D960E8C380B724a48AC59E2DfF1b2CB4a1eAee",
+    bundler3: "0x82b684483e844422FD339df0b67b3B111F02c66E",
+    adapter: "0x725AB8CAd931BCb80Fdbf10955a806765cCe00e5",
+    irm: "0x09475a3D6eA8c314c592b1a3799bDE044E2F400F",
+    usdc: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+  },
+};
+const CFG = ALL[CHAIN_ID];
+if (!CFG) {
+  console.error(`Unknown chain ${CHAIN_ID}. Supported: ${Object.keys(ALL).join(", ")}`);
+  process.exit(1);
+}
+// A dry run targets one pool, so the loan token is fixed for the whole run.
+CFG.usdc = process.argv[3] ?? CFG.usdc;
+const MORPHO = CFG.morpho;
 const MAX = 2n ** 256n - 1n;
 const ZERO32 = `0x${"0".repeat(64)}`;
 
@@ -117,6 +155,8 @@ for (const user of authorized.slice(0, 12)) {
       totalSupplyAssets,
       totalSupplyShares,
       totalBorrowAssets: m[2],
+      totalBorrowShares: m[3],
+      lastUpdate: m[4],
       fee: m[5],
       rateAtTarget: rT < 0n ? 0n : rT,
       rewardApr: (listed[k].state?.rewards ?? []).reduce((a, r) => a + (r.supplyApr ?? 0), 0),
@@ -209,7 +249,55 @@ if (!legs.length) {
   process.exit(0);
 }
 
-// 6. Encode the bundle (mirrors src/core/bundle.ts).
+// 6. Accrue each leg's market to the latest block before quoting a share price.
+// The app does this (src/data/onchain.ts -> core/accrue.ts); without it the quote is the stale
+// last-update price, and on a chain where markets go untouched for a while the real price has
+// already moved past the bound, so GeneralAdapter1 reverts with SlippageExceeded().
+const WAD = 10n ** 18n;
+const wMulDown = (x, y) => (x * y) / WAD;
+const wTaylorCompounded = (rate, elapsed) => {
+  const x = rate * elapsed;
+  const x2 = (x * x) / WAD / 2n;
+  const x3 = (x2 * x) / WAD / 3n;
+  return x + x2 + x3;
+};
+const toSharesDown = (assets, totalAssets, totalShares) =>
+  (assets * (totalShares + 1000000n)) / (totalAssets + 1n);
+
+const legBlock = await client.getBlock();
+const legRates = await client.multicall({
+  allowFailure: false,
+  contracts: legs.map((l) => ({
+    address: CFG.irm,
+    abi: irmAbi,
+    functionName: "borrowRateView",
+    args: [
+      l.params,
+      {
+        totalSupplyAssets: l.totalSupplyAssets,
+        totalSupplyShares: l.totalSupplyShares,
+        totalBorrowAssets: l.totalBorrowAssets,
+        totalBorrowShares: l.totalBorrowShares,
+        lastUpdate: l.lastUpdate,
+        fee: l.fee,
+      },
+    ],
+  })),
+});
+
+legs.forEach((l, i) => {
+  const elapsed = legBlock.timestamp - l.lastUpdate;
+  if (elapsed <= 0n || l.totalBorrowAssets === 0n || legRates[i] === 0n) return;
+  const interest = wMulDown(l.totalBorrowAssets, wTaylorCompounded(legRates[i], elapsed));
+  l.totalSupplyAssets += interest;
+  if (l.fee > 0n) {
+    const feeAmount = wMulDown(interest, l.fee);
+    l.totalSupplyShares += toSharesDown(feeAmount, l.totalSupplyAssets - feeAmount, l.totalSupplyShares);
+  }
+});
+console.log(`accrued ${legs.length} legs to block ${legBlock.number} (${legBlock.timestamp})`);
+
+// 7. Encode the bundle (mirrors src/core/bundle.ts).
 const RAY = 10n ** 27n;
 const sharePrice = (a, s) => ((a + 1n) * RAY) / (s + 1000000n);
 const withdraws = legs.filter((l) => l.delta < 0n).sort((a, b) => (a.delta < b.delta ? -1 : 1));

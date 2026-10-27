@@ -1,13 +1,14 @@
 import { USDC_DECIMALS } from "../config/chains";
 
+// Every managed loan asset (USDC, USDT, aUSD) is 6-decimal, so one scale serves them all.
 const SCALE = 10 ** USDC_DECIMALS;
 
-export function usdcToNumber(units: bigint): number {
+export function unitsToNumber(units: bigint): number {
   return Number(units) / SCALE;
 }
 
-export function fmtUsdc(units: bigint, digits = 2): string {
-  return usdcToNumber(units).toLocaleString(undefined, {
+export function fmtAmount(units: bigint, digits = 2): string {
+  return unitsToNumber(units).toLocaleString(undefined, {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
@@ -16,12 +17,25 @@ export function fmtUsdc(units: bigint, digits = 2): string {
 export function fmtDelta(units: bigint, digits = 2): string {
   if (units === 0n) return "—";
   const sign = units > 0n ? "+" : "−";
-  return `${sign}${fmtUsdc(units < 0n ? -units : units, digits)}`;
+  return `${sign}${fmtAmount(units < 0n ? -units : units, digits)}`;
 }
 
 export function fmtPct(x: number, digits = 2): string {
   if (!Number.isFinite(x)) return "—";
   return `${(x * 100).toFixed(digits)}%`;
+}
+
+/**
+ * APY for the market list. Dust markets at 100% utilisation can print five-figure percentages, which
+ * would overflow the column, so anything absurd collapses to a marker rather than a precise number.
+ */
+export function fmtApy(x: number): string {
+  if (!Number.isFinite(x)) return "—";
+  const pct = x * 100;
+  if (pct >= 1000) return ">999%";
+  if (pct <= -1000) return "<-999%";
+  if (pct >= 100) return `${pct.toFixed(0)}%`;
+  return `${pct.toFixed(2)}%`;
 }
 
 export function fmtShare(part: bigint, total: bigint): string {

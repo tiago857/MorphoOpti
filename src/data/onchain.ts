@@ -122,6 +122,7 @@ function buildMeta(params: MarketParams, state: MarketState, api: ApiMarket | un
     .map((r) => ({ symbol: r.asset!.symbol, address: r.asset!.address, supplyApr: r.supplyApr ?? 0 }));
   return {
     collateralSymbol: api?.collateralAsset?.symbol ?? `${params.collateralToken.slice(0, 6)}…${params.collateralToken.slice(-4)}`,
+    loanSymbol: api?.loanAsset?.symbol ?? `${params.loanToken.slice(0, 6)}…${params.loanToken.slice(-4)}`,
     collateralAddress: params.collateralToken,
     lltv: wadToNumber(params.lltv),
     supplyAssetsUsd: api?.state?.supplyAssetsUsd ?? Number(state.totalSupplyAssets) / 1e6,

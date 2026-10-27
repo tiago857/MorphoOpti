@@ -18,10 +18,32 @@ export interface OptimizerMarketInput {
   position: bigint;
   whitelisted: boolean;
   /**
+   * Fixed supply rate for venues with no IRM curve to simulate — a vault, whose yield comes from its
+   * own internal allocation. When set, the rate is used as-is at any size, and totalSupplyAssets is
+   * treated purely as the external supply that dilutes rewards.
+   */
+  flatApy?: number;
+  /**
+   * Per-market cap as a fraction of the pool, overriding the pool default (and the 1/N adjustment).
+   */
+  capFraction?: number;
+  /**
+   * Capital tied up in a loop in this market. The optimizer never withdraws below it, and it counts
+   * towards exposure: a locked amount above the cap raises the cap rather than forcing a withdrawal.
+   */
+  locked?: bigint;
+  /**
    * Markets whose yield cannot be modelled (non-Adaptive-Curve IRM) are held at their current
    * allocation instead of being assumed to earn nothing.
    */
   pinned?: boolean;
+  /**
+   * Markets with no usable free liquidity: their headline APY is a utilization spike, and new
+   * supply could be borrowed straight out and stuck. They may be exited but never receive capital.
+   */
+  noInflow?: boolean;
+  /** Why the market is closed to inflows, in numbers, shown to the user against the market. */
+  noInflowReason?: string;
 }
 
 export interface OptimizerOptions {
@@ -29,8 +51,16 @@ export interface OptimizerOptions {
   capFraction?: number;
   /** Number of greedy steps used to discretise the portfolio (2000). */
   steps?: number;
-  /** Deltas smaller than this (token units) are dropped (1 USDC). */
+  /** Deltas smaller than this (token units) are dropped (1 unit of the loan asset). */
   dustThreshold?: bigint;
+  /** Loan-asset symbol, used only in warning text. */
+  symbol?: string;
+  /**
+   * Idle loan token in the wallet that the user chose to deploy. It joins the pool as capital with
+   * no current home: it counts towards the total that caps are measured against, earns nothing in
+   * "now", and is placed like any other capital.
+   */
+  idle?: bigint;
 }
 
 export interface MarketAllocation {
@@ -42,6 +72,15 @@ export interface MarketAllocation {
   delta: bigint;
   cap: bigint;
   liquidityFloor: bigint;
+  /** Capital held in place because it is locked in a loop. */
+  locked: bigint;
+  /** True when `locked` pushed this market above its configured cap. */
+  overCap: boolean;
+  /**
+   * What is wrong with this market specifically, one sentence each, with amounts. Shown against the
+   * market itself; `AllocationResult.warnings` keeps only pool-wide notices.
+   */
+  issues: string[];
   currentNativeApy: number;
   currentRewardApr: number;
   currentApy: number;
@@ -57,8 +96,10 @@ export interface AllocationResult {
   markets: MarketAllocation[];
   portfolioApyNow: number;
   portfolioApyProjected: number;
-  /** USDC that could not be placed within caps (returned to wallet by the bundle skim). */
+  /** Capital that could not be placed within caps (returned to wallet by the bundle skim). */
   unallocated: bigint;
+  /** Wallet capital included in `total` (0 when idle deployment is off). */
+  idle: bigint;
   hasChanges: boolean;
   warnings: string[];
 }
@@ -70,23 +111,33 @@ interface Work {
   b: number;
   fee: number;
   rT: number;
+  /** Fixed rate for a venue with no IRM curve (a vault); undefined for a market. */
+  flat?: number;
   /** Annual reward budget in token units (rewardApr * current total supply). */
   rewardBudget: number;
   pos: number;
+  /** Cap actually enforced: the configured cap, raised to `floor` when capital cannot be moved. */
   cap: number;
+  /** Minimum this market may hold: the larger of the liquidity floor and the locked amount. */
   floor: number;
+  /** Cap from settings alone, before locked/illiquid capital forces it up. */
+  configuredCap: number;
+  /** Floor imposed by market liquidity alone, ignoring locked capital. */
+  liquidityFloor: number;
+  locked: number;
+  overCap: boolean;
   x: number;
 }
 
-const DEFAULTS = { capFraction: 0.1, steps: 2000, dustThreshold: 1_000_000n };
+const DEFAULTS = { capFraction: 0.1, steps: 2000, dustThreshold: 1_000_000n, symbol: "USDC", idle: 0n };
 
 /** Annual yield (token units) earned by allocation `x` in market `m`, including own price impact. */
 function yieldAt(m: Work, x: number): number {
   if (x <= 0) return 0;
   const total = m.sExt + x;
   if (total <= 0) return 0;
-  const u = utilization(total, m.b);
-  const native = x * supplyApy(u, m.rT, m.fee);
+  // A flat-rate venue still dilutes its reward budget, it just does not move its own base rate.
+  const native = m.flat !== undefined ? x * m.flat : x * supplyApy(utilization(total, m.b), m.rT, m.fee);
   const rewards = m.rewardBudget * (x / total);
   return native + rewards;
 }
@@ -97,6 +148,7 @@ function kinkAllocation(m: Work): number {
 }
 
 function nativeApyAt(m: Work, x: number): number {
+  if (m.flat !== undefined) return m.flat;
   const total = m.sExt + x;
   if (total <= 0) return 0;
   return supplyApy(utilization(total, m.b), m.rT, m.fee);
@@ -115,15 +167,39 @@ export function optimizeAllocation(
   const opts = { ...DEFAULTS, ...options };
   const warnings: string[] = [];
 
-  const total = inputs.reduce((acc, m) => acc + m.position, 0n);
+  const idle = opts.idle > 0n ? opts.idle : 0n;
+  const deployed = inputs.reduce((acc, m) => acc + m.position, 0n);
+  // Caps are a share of everything being allocated, wallet capital included; otherwise adding idle
+  // funds would leave the cap sized for half the money and strand the rest as unplaceable.
+  const total = deployed + idle;
   const T = Number(total);
-  // Pinned markets cannot receive capital, so they do not count towards the 1/N cap adjustment.
-  const nWhitelisted = inputs.filter((m) => m.whitelisted && !m.pinned).length;
-  const effectiveCapFraction = nWhitelisted > 0 ? Math.max(opts.capFraction, 1 / nWhitelisted) : 0;
+  // Pinned and noInflow markets cannot receive capital, so they do not count as places to put it.
+  const nWhitelisted = inputs.filter((m) => m.whitelisted && !m.pinned && !m.noInflow).length;
+  // When there are too few markets for the default cap to hold all the capital (5 markets at 10% only
+  // fit half of it), the cap is switched off for this pool rather than raised to an even 1/N split:
+  // an even split ignores yield entirely, and the user wants the money where it earns most — with a
+  // single market, that is 100% in it. Explicit per-market caps still apply.
+  const capFits = nWhitelisted * opts.capFraction >= 1 - 1e-9;
+  const effectiveCapFraction = nWhitelisted === 0 ? 0 : capFits ? opts.capFraction : 1;
 
-  if (effectiveCapFraction > opts.capFraction + 1e-12) {
+  if (nWhitelisted > 0 && !capFits) {
+    const needed = Math.ceil(1 / opts.capFraction - 1e-9);
     warnings.push(
-      `Only ${nWhitelisted} markets whitelisted; cap raised to ${(effectiveCapFraction * 100).toFixed(1)}% each.`,
+      `Only ${nWhitelisted} ${nWhitelisted === 1 ? "market" : "markets"} whitelisted, fewer than the ${needed} a ` +
+        `${(opts.capFraction * 100).toFixed(0)}% cap needs, so the cap is off in this pool and capital goes where it ` +
+        `earns most. Whitelist at least ${needed} markets to apply it.`,
+    );
+  }
+
+  // When the number of whitelisted markets times the cap is exactly 1, every market is pinned at the
+  // cap and the allocation is fully determined before any yield is considered. Say so, because the
+  // optimizer silently doing nothing looks identical to the optimizer working.
+  const headroom = nWhitelisted * effectiveCapFraction;
+  if (nWhitelisted > 1 && headroom < 1 + 1e-9) {
+    warnings.push(
+      `${nWhitelisted} whitelisted markets at a ${(effectiveCapFraction * 100).toFixed(1)}% cap fills exactly ` +
+        `${(headroom * 100).toFixed(0)}% of the pool, so every market is pinned at its cap and yield cannot be ` +
+        `optimised. Whitelist more markets, or raise the cap, to let the allocation actually choose.`,
     );
   }
 
@@ -135,8 +211,9 @@ export function optimizeAllocation(
       portfolioApyNow: 0,
       portfolioApyProjected: 0,
       unallocated: 0n,
+      idle: 0n,
       hasChanges: false,
-      warnings: [...warnings, "No USDC supplied in any market for this address."],
+      warnings: [...warnings, `No ${opts.symbol} supplied in any market for this address.`],
     };
   }
 
@@ -145,36 +222,65 @@ export function optimizeAllocation(
     const B = Number(m.totalBorrowAssets);
     const pos = Number(m.position);
     const liquidity = Math.max(0, S - B);
+    // Locked capital sits in a loop: it can never be withdrawn, and it can never exceed what is
+    // actually supplied here.
+    const locked = Math.min(Number(m.locked ?? 0n), pos);
+    // A per-market cap overrides the pool default, including the 1/N adjustment.
+    const capFraction = m.capFraction ?? effectiveCapFraction;
+    const whitelistCap = m.pinned ? pos : m.whitelisted ? capFraction * T : 0;
+    const configuredCap = m.noInflow ? Math.min(whitelistCap, pos) : whitelistCap;
     // A pinned market is frozen at its current allocation: floor == cap == position.
-    const floor = m.pinned ? pos : Math.max(0, pos - liquidity);
-    const cap = m.pinned ? pos : m.whitelisted ? effectiveCapFraction * T : 0;
+    const liquidityFloor = m.pinned ? pos : Math.max(0, pos - liquidity);
+    // Locked wins over the cap: hold the capital and let the market sit above cap rather than
+    // emitting a withdrawal that would break the loop.
+    const floor = Math.max(liquidityFloor, locked);
+    const cap = Math.max(configuredCap, floor);
     return {
       input: m,
       sExt: Math.max(0, S - pos),
       b: B,
       fee: wadToNumber(m.feeWad),
       rT: wadToNumber(m.rateAtTargetWad),
+      flat: m.flatApy,
       rewardBudget: m.rewardApr * S,
       pos,
       cap,
       floor,
+      configuredCap,
+      liquidityFloor,
+      locked,
+      overCap: locked > configuredCap + 0.5,
       x: floor,
     };
   });
 
-  for (const m of work) {
-    if (m.input.pinned && m.pos > 0) {
-      warnings.push(
-        `Market ${m.input.id.slice(0, 10)}… uses a non-standard interest rate model; its ${fmt(m.pos)} USDC is held in place.`,
-      );
-      continue;
+  const issues: string[][] = work.map((m) => {
+    const out: string[] = [];
+    if (m.input.pinned) {
+      if (m.pos > 0) {
+        out.push(
+          `Uses a non-standard interest rate model, so its yield cannot be modelled; your ${fmt(m.pos)} ${opts.symbol} here is held in place.`,
+        );
+      }
+      return out;
     }
-    if (m.floor > m.cap + 0.5) {
-      warnings.push(
-        `Market ${m.input.id.slice(0, 10)}… lacks liquidity to withdraw fully; ${fmt(m.floor)} USDC must stay.`,
+    if (m.input.noInflow && m.input.whitelisted) {
+      out.push(
+        `${m.input.noInflowReason ?? "Too little free liquidity."} Receives no new ${opts.symbol} even though it is whitelisted.`,
       );
     }
-  }
+    if (m.overCap) {
+      out.push(
+        `${fmt(m.locked)} ${opts.symbol} is locked in a loop here, above the ${fmt(m.configuredCap)} ${opts.symbol} cap; it is held in place and the cap is not enforced.`,
+      );
+    }
+    if (m.liquidityFloor > m.configuredCap + 0.5) {
+      out.push(
+        `Only ${fmt(Math.max(0, m.sExt + m.pos - m.b))} ${opts.symbol} liquidity available, so ${fmt(m.liquidityFloor)} of your ${fmt(m.pos)} ${opts.symbol} cannot be withdrawn right now and must stay.`,
+      );
+    }
+    return out;
+  });
 
   // Greedy water-filling. The chunk shrinks to the largest remaining head-room so caps can be hit exactly.
   let remaining = T - work.reduce((acc, m) => acc + m.floor, 0);
@@ -210,10 +316,14 @@ export function optimizeAllocation(
         const maxMove = Math.floor(Math.min(from.x - from.floor, to.cap - to.x));
         if (maxMove < 1) continue;
         const candidates = new Set<number>([maxMove, Math.floor(maxMove / 2), Math.floor(maxMove / 4), step * 100, step * 10, step]);
-        const toKink = Math.ceil(kinkAllocation(to) - to.x);
-        if (toKink >= 1) candidates.add(toKink);
-        const fromKink = Math.floor(from.x - kinkAllocation(from));
-        if (fromKink >= 1) candidates.add(fromKink);
+        if (to.flat === undefined) {
+          const toKink = Math.ceil(kinkAllocation(to) - to.x);
+          if (toKink >= 1) candidates.add(toKink);
+        }
+        if (from.flat === undefined) {
+          const fromKink = Math.floor(from.x - kinkAllocation(from));
+          if (fromKink >= 1) candidates.add(fromKink);
+        }
         const before = yieldAt(from, from.x) + yieldAt(to, to.x);
         let bestD = 0;
         let bestAfter = before + 1e-9;
@@ -268,7 +378,9 @@ export function optimizeAllocation(
   }
 
   if (unallocated > 0n) {
-    warnings.push(`${fmt(Number(unallocated))} USDC cannot be placed within caps and will be returned to the wallet.`);
+    warnings.push(
+      `${fmt(Number(unallocated))} ${opts.symbol} cannot be placed within caps and will be returned to the wallet.`,
+    );
   }
 
   const markets: MarketAllocation[] = work.map((m, i) => {
@@ -285,7 +397,10 @@ export function optimizeAllocation(
       target: targets[i],
       delta: deltas[i],
       cap: BigInt(Math.floor(m.cap)),
-      liquidityFloor: BigInt(Math.ceil(m.floor)),
+      liquidityFloor: BigInt(Math.ceil(m.liquidityFloor)),
+      locked: BigInt(Math.round(m.locked)),
+      overCap: m.overCap,
+      issues: issues[i],
       currentNativeApy,
       currentRewardApr,
       currentApy: currentNativeApy + currentRewardApr,
@@ -305,6 +420,7 @@ export function optimizeAllocation(
     portfolioApyNow,
     portfolioApyProjected,
     unallocated,
+    idle,
     hasChanges: deltas.some((d) => d !== 0n),
     warnings,
   };
@@ -320,6 +436,9 @@ function emptyAllocation(m: OptimizerMarketInput): MarketAllocation {
     delta: 0n,
     cap: 0n,
     liquidityFloor: 0n,
+    locked: 0n,
+    overCap: false,
+    issues: [],
     currentNativeApy: 0,
     currentRewardApr: m.rewardApr,
     currentApy: m.rewardApr,

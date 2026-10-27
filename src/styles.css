@@ -1,33 +1,90 @@
+/* MorphoOpti — light "ledger blotter" theme.
+   Cool paper page, white panels, ink-navy type, one petrol accent.
+   Every colour lives as a token on :root; components never hard-code one. */
+
 :root {
-  --bg: #0f1115;
-  --panel: #171a21;
-  --border: #262a33;
-  --text: #e6e8ee;
-  --muted: #8a91a3;
-  --accent: #3b82f6;
-  --accent-2: #2563eb;
-  --good: #34d399;
-  --warn: #f59e0b;
-  --bad: #f87171;
-  --in: rgba(52, 211, 153, 0.08);
-  --out: rgba(245, 158, 11, 0.08);
-  color-scheme: dark;
+  /* Surfaces: page → panel → inset. Three steps of elevation, no shadows doing the work. */
+  --paper: #e9edf3;
+  --paper-edge: #dde3ec;
+  --surface: #ffffff;
+  --surface-2: #f3f6fa;
+  --surface-3: #eaeff6;
+
+  /* Hairlines */
+  --line: #dce2eb;
+  --line-strong: #c2ccda;
+
+  /* Ink */
+  --text: #121a24;
+  --text-2: #3c4959;
+  --muted: #64728a;
+
+  /* Accent: petrol. Deliberately not the default indigo, and far enough from
+     --good that the semantic greens never read as "selected". */
+  --accent: #0e6a64;
+  --accent-strong: #0a534e;
+  --accent-soft: #e2f0ee;
+  --accent-ring: rgba(14, 106, 100, 0.32);
+
+  /* Semantics. Always paired with a sign, a rail style or a label — never hue alone. */
+  --good: #0b6b41;
+  --good-soft: #e6f2eb;
+  --good-rail: #17914f;
+  --warn: #8a5300;
+  --warn-soft: #fbf0dd;
+  --warn-rail: #c98a1e;
+  --bad: #a8291a;
+  --bad-soft: #fbeae7;
+
+  /* Row washes */
+  --in: #f0f8f3;
+  --out: #fdf7ec;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 1px rgba(18, 26, 36, 0.03), 0 4px 14px -8px rgba(18, 26, 36, 0.18);
+
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  color-scheme: light;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
+body {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--paper);
   color: var(--text);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+p {
+  margin: 0;
 }
 
 a {
   color: var(--accent);
   text-decoration: none;
+  text-underline-offset: 2px;
 }
 a:hover {
   text-decoration: underline;
@@ -35,43 +92,87 @@ a:hover {
 
 code,
 .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 0.92em;
+  font-variant-numeric: tabular-nums;
+}
+code {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
 }
 
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ---- Shell ---- */
+
 .app {
-  max-width: 1400px;
+  max-width: 1480px;
   margin: 0 auto;
-  padding: 16px 20px 40px;
+  padding: 0 20px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+@media (max-width: 640px) {
+  .app {
+    padding: 0 12px 40px;
+  }
 }
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   flex-wrap: wrap;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 14px;
+  padding: 14px 0 12px;
+  margin-bottom: 2px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--paper-edge);
 }
 .brand {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 12px;
+  flex-wrap: wrap;
   margin-right: auto;
+  min-width: 0;
 }
 .brand h1 {
-  font-size: 18px;
+  font-size: 19px;
   margin: 0;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.025em;
+}
+/* A small petrol tick before the wordmark: the one piece of pure ornament. */
+.brand h1::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 0.85em;
+  margin-right: 9px;
+  vertical-align: -0.03em;
+  background: var(--accent);
+  border-radius: 1px;
+}
+.brand .muted {
+  font-size: 12px;
 }
 
 .grid {
   display: grid;
-  grid-template-columns: minmax(340px, 2fr) minmax(0, 3fr);
-  gap: 16px;
+  grid-template-columns: minmax(380px, 11fr) minmax(0, 12fr);
+  gap: 14px;
+  align-items: start;
 }
-@media (max-width: 1000px) {
+@media (max-width: 1100px) {
   .grid {
     grid-template-columns: 1fr;
   }
@@ -79,238 +180,76 @@ code,
 .col {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   min-width: 0;
 }
 
+/* ---- Panels ---- */
+
 .panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 13px 15px 15px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 11px;
   min-width: 0;
 }
 .panel-head {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 .panel-head h2 {
   margin: 0;
   font-size: 15px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
-.panel-head .muted {
+.panel-head > .muted {
   margin-right: auto;
+  font-size: 12px;
+  min-width: 0;
 }
+.sub-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sub-head h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* ---- Utility ---- */
 
 .row {
   display: flex;
   align-items: center;
+  min-width: 0;
 }
 .gap {
-  gap: 10px;
+  gap: 9px;
 }
 .wrap {
   flex-wrap: wrap;
 }
-
-button {
-  font: inherit;
-  color: var(--text);
-  background: #222733;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 6px 12px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-button:hover:not(:disabled) {
-  border-color: #3a4150;
-}
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
-}
-button.primary:hover:not(:disabled) {
-  background: var(--accent-2);
-}
-button.ghost {
-  background: transparent;
-}
-button.big {
-  padding: 9px 18px;
-  font-weight: 600;
-}
-
-input {
-  font: inherit;
-  color: var(--text);
-  background: #0f1218;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 6px 10px;
+.grow {
   flex: 1;
   min-width: 0;
 }
-input[type="checkbox"] {
-  flex: none;
-  accent-color: var(--accent);
-}
-
-.segmented {
-  display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-}
-.segmented button {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-.segmented button.active {
-  background: var(--accent);
-  color: white;
-}
-
-.wallet {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.pill {
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 5px 10px;
-  background: #0f1218;
-}
-.hint {
-  color: var(--muted);
-  font-size: 12px;
-  max-width: 320px;
-}
-
-.scroll {
-  overflow-x: auto;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-th,
-td {
-  padding: 7px 8px;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-  vertical-align: top;
-  white-space: nowrap;
-}
-th {
-  color: var(--muted);
-  font-weight: 500;
-  font-size: 12px;
-}
-.num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-table.compact td,
-table.compact th {
-  padding: 5px 6px;
-}
-table.compact tbody tr {
-  cursor: pointer;
-}
-table.compact tbody tr:hover {
-  background: #1d212a;
-}
-table.compact tbody tr.on {
-  background: rgba(59, 130, 246, 0.1);
-}
-tr.in {
-  background: var(--in);
-}
-tr.out {
-  background: var(--out);
-}
-
-.stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
-}
-.stat {
-  background: #0f1218;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 12px;
-  display: flex;
-  flex-direction: column;
-}
-.stat .label {
-  color: var(--muted);
-  font-size: 12px;
-}
-.stat .value {
-  font-size: 18px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.steps {
-  margin: 0;
-  padding-left: 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.notice {
-  background: rgba(59, 130, 246, 0.08);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: 8px;
-  padding: 10px 12px;
-}
-.notice p {
-  margin: 0 0 8px;
-}
-.warn-box {
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  border-radius: 8px;
-  padding: 8px 12px;
-  margin: 0;
-}
-
-.badge {
-  display: inline-block;
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--muted);
-  margin-left: 6px;
-}
-.badge.warn {
-  color: var(--warn);
-  border-color: rgba(245, 158, 11, 0.5);
-}
-
 .muted {
   color: var(--muted);
 }
 .tiny {
   font-size: 11px;
+  line-height: 1.4;
 }
 .good {
   color: var(--good);
@@ -321,6 +260,709 @@ tr.out {
 .error {
   color: var(--bad);
 }
-p {
+
+/* ---- Controls ---- */
+
+button {
+  font: inherit;
+  font-weight: 500;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 5px 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+button:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--muted);
+  color: var(--text);
+}
+button:active:not(:disabled) {
+  background: var(--surface-3);
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+button.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #fff;
+}
+button.ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+}
+button.ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+button.big {
+  padding: 8px 18px;
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+input,
+select {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 5px 9px;
+  flex: 1;
+  min-width: 0;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+input::placeholder {
+  color: var(--muted);
+  opacity: 0.75;
+}
+input:hover:not(:disabled),
+select:hover {
+  border-color: var(--muted);
+}
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+select {
+  flex: none;
+  cursor: pointer;
+}
+input[type="number"],
+input[inputmode="decimal"] {
+  font-variant-numeric: tabular-nums;
+}
+input[type="checkbox"] {
+  flex: none;
+  width: 14px;
+  height: 14px;
   margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ---- Wallet ---- */
+
+.wallet {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pill {
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 4px 12px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 12px;
+}
+.hint {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+  max-width: 320px;
+}
+
+/* ---- Tables ---- */
+
+.scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.scroll.tall {
+  max-height: 62vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+th,
+td {
+  padding: 7px 9px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+tbody tr:last-child > td {
+  border-bottom: 0;
+}
+th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  vertical-align: bottom;
+  border-bottom: 0;
+  box-shadow: inset 0 -1px 0 var(--line-strong);
+}
+td {
+  color: var(--text-2);
+}
+td > div:first-child {
+  color: var(--text);
+}
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+table.compact td,
+table.compact th {
+  padding: 5px 6px;
+}
+/* The markets table carries the most columns, so its metrics are sized to fit without scrolling. */
+.scroll.tall table.compact {
+  table-layout: fixed;
+}
+.scroll.tall table.compact th:nth-child(1) { width: 30px; }
+.scroll.tall table.compact th:nth-child(2) { width: auto; }
+.scroll.tall table.compact th:nth-child(3) { width: 52px; }
+.scroll.tall table.compact th:nth-child(4) { width: 72px; }
+.scroll.tall table.compact th:nth-child(5) { width: 48px; }
+.scroll.tall table.compact th:nth-child(6) { width: 62px; }
+.scroll.tall table.compact th:nth-child(7) { width: 60px; }
+.scroll.tall table.compact th:nth-child(8) { width: 52px; }
+.scroll.tall table.compact th:nth-child(9) { width: 76px; }
+.scroll.tall table.compact td:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+table.compact tbody tr {
+  cursor: pointer;
+}
+table.compact tbody tr:hover {
+  background: var(--surface-2);
+}
+
+/* Row state rails. Drawn as a background stripe on the first cell so the marker
+   survives border-collapse and so in/out differ in *pattern* as well as hue:
+   solid for capital coming in, dashed for capital leaving. */
+tbody tr.on {
+  background: var(--accent-soft);
+}
+tbody tr.on:hover {
+  background: #d7e9e7;
+}
+tbody tr.on > td:first-child {
+  background-image: linear-gradient(var(--accent), var(--accent));
+  background-size: 3px 100%;
+  background-repeat: no-repeat;
+  background-position: left center;
+}
+tr.in {
+  background: var(--in);
+}
+tr.out {
+  background: var(--out);
+}
+tr.in > td:first-child {
+  background-image: linear-gradient(var(--good-rail), var(--good-rail));
+  background-size: 3px 100%;
+  background-repeat: no-repeat;
+  background-position: left center;
+}
+tr.out > td:first-child {
+  background-image: repeating-linear-gradient(
+    180deg,
+    var(--warn-rail) 0 4px,
+    transparent 4px 8px
+  );
+  background-size: 3px 100%;
+  background-repeat: no-repeat;
+  background-position: left center;
+}
+tr.in > td:first-child,
+tr.out > td:first-child,
+tbody tr.on > td:first-child {
+  padding-left: 12px;
+}
+
+/* ---- Inline editable cells (Cap, Locked) ----
+   These sit in every row, so they stay flat until touched: a dotted underline
+   says "typeable", the full field only appears on hover or focus. */
+
+input.mini {
+  width: 44px;
+  flex: none;
+  padding: 2px 5px;
+  text-align: right;
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: 1px dashed var(--line-strong);
+  border-radius: 3px;
+  color: var(--text);
+}
+input.mini.wide {
+  width: 68px;
+}
+input.mini:hover {
+  background: var(--surface);
+  border-color: var(--line-strong);
+}
+input.mini:focus {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+input.mini::-webkit-outer-spin-button,
+input.mini::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input.mini[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.cap-default {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.cap-default input {
+  width: 52px;
+  flex: none;
+  padding: 3px 6px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text);
+}
+
+/* ---- Stat readout band ----
+   Not a row of cards: one instrument strip, divided by hairlines. */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 9px 14px;
+  border-left: 1px solid var(--line);
+  min-width: 0;
+}
+.stat:first-child {
+  border-left: 0;
+  padding-left: 2px;
+}
+.stat .label {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+}
+.stat .value {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* ---- Messages ---- */
+
+.steps {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--text-2);
+}
+.steps li::marker {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.steps b {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.notice,
+.warn-box {
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  margin: 0;
+  border: 1px solid;
+  border-left-width: 3px;
+}
+.notice {
+  background: var(--accent-soft);
+  border-color: rgba(14, 106, 100, 0.28);
+  border-left-color: var(--accent);
+  color: var(--text-2);
+}
+.notice p {
+  margin: 0 0 8px;
+}
+.warn-box {
+  background: var(--warn-soft);
+  border-color: rgba(201, 138, 30, 0.45);
+  border-left-color: var(--warn-rail);
+  color: #6f4300;
+}
+
+/* ---- Badges ---- */
+
+.badge {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--muted);
+  margin-left: 6px;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.badge.warn {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: rgba(201, 138, 30, 0.5);
+}
+
+/* ---- Market filters ---- */
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 11px;
+}
+.filters > .row > input {
+  background: var(--surface);
+}
+.filter-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.filter-group {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.filter-label {
+  color: var(--muted);
+  font-size: 11px;
+  min-width: 70px;
+  flex: none;
+  padding-top: 3px;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+.chip {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text-2);
+}
+.chip:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: var(--muted);
+}
+.chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.chip.on:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: #fff;
+}
+
+/* ---- Pool sections ----
+   Where the boldness is spent: a petrol spine, a heavier symbol, a quiet head. */
+
+.panel.pool {
+  border-left: 3px solid var(--accent);
+  padding-left: 14px;
+}
+.panel.pool > .panel-head {
+  cursor: pointer;
+  user-select: none;
+}
+.panel.pool > .panel-head:hover h2 {
+  color: var(--accent);
+}
+.pool-symbol {
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+.rebalance {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- Sortable table headers ---- */
+th.sortable {
+  padding: 0;
+}
+th.sortable button {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  padding: 7px 8px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  cursor: pointer;
+}
+th.sortable.num button {
+  justify-content: flex-end;
+}
+th.sortable button:hover {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+th.sorted button {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+.sort-arrow {
+  font-size: 10px;
+  /* Reserve the arrow's width so headers do not shift as the active column changes. */
+  min-width: 8px;
+  display: inline-block;
+}
+td.strong {
+  font-weight: 650;
+  color: var(--text);
+}
+
+/* ---- Pinned market column ----
+   The markets table is wider than its panel, so the checkbox and the market name stay pinned while
+   the numeric columns scroll under them. background-color (not the `background` shorthand) so the
+   accent rail drawn as a background-image on the first cell survives. */
+.scroll.tall table.compact tbody tr {
+  background-color: var(--surface);
+}
+.scroll.tall table.compact th:nth-child(1),
+.scroll.tall table.compact td:nth-child(1),
+.scroll.tall table.compact th:nth-child(2),
+.scroll.tall table.compact td:nth-child(2) {
+  position: sticky;
+  background-color: inherit;
+}
+.scroll.tall table.compact th:nth-child(1),
+.scroll.tall table.compact td:nth-child(1) {
+  left: 0;
+  width: 34px;
+}
+.scroll.tall table.compact th:nth-child(2),
+.scroll.tall table.compact td:nth-child(2) {
+  left: 34px;
+  box-shadow: 1px 0 0 var(--line);
+}
+.scroll.tall table.compact tbody td:nth-child(1),
+.scroll.tall table.compact tbody td:nth-child(2) {
+  z-index: 1;
+}
+/* Header cells must outrank the pinned body cells they scroll past. */
+.scroll.tall table.compact thead th:nth-child(1),
+.scroll.tall table.compact thead th:nth-child(2) {
+  z-index: 3;
+  background-color: var(--surface-2);
+}
+
+/* ---- Collateral vs deposit token ----
+   The collateral backs the loan; the deposit token is what you supply and what defines the pool.
+   They are named separately so a row is never ambiguous about which is which. */
+.market-name {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+.market-name .collateral {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deposit {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+/* ---- Pools grouped by chain ---- */
+.chain-group {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.chain-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.chain-heading::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* ---- Vault rows ----
+   A vault is a different kind of venue from a market, so it is marked rather than blended in: same
+   columns, but an accent-tinted badge and a left edge that reads as "not a market". */
+.badge.vault-badge {
+  color: var(--accent-strong);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.scroll.tall table.compact tbody tr.vault td:nth-child(2) {
+  box-shadow:
+    1px 0 0 var(--line),
+    inset 2px 0 0 var(--accent-soft);
+}
+
+/* Auto-refresh toggle and manual refresh, sitting left of the wallet button. */
+.refresh-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+button.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+button.toggle .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+button.toggle.on {
+  color: var(--text);
+}
+button.toggle.on .dot {
+  background: var(--accent);
+}
+
+/* ---- Idle wallet capital toggle ----
+   Sits above the allocation it changes, styled as a setting row rather than an alert. */
+
+.idle-toggle {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 9px;
+  row-gap: 1px;
+  align-items: center;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.idle-toggle input {
+  margin: 0;
+}
+.idle-toggle strong {
+  font-variant-numeric: tabular-nums;
+}
+.idle-toggle .tiny {
+  grid-column: 2;
+}
+
+/* ---- Per-market alert ----
+   A red sign beside the market name; the specific problem is in its tooltip. The text-presentation
+   glyph (no emoji variation selector) is used so it takes the colour rather than rendering yellow. */
+
+.alert-icon {
+  color: var(--bad);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1;
+  cursor: help;
+  border-radius: 3px;
+  flex: none;
+}
+.alert-icon:focus-visible {
+  outline: 2px solid var(--bad);
+  outline-offset: 2px;
 }
